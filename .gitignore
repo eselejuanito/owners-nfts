@@ -127,3 +127,9 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Ignore Chrome and Firefox Drivers
+chromedriver.exe
+geckodriver.exe
+geckodriver.log
+owners-nfts.json
