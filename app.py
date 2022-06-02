@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
-from time import sleep
+import time
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
@@ -8,9 +8,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 class App:
-    def __init__(self, number_of_assets = 0):
+    def __init__(self, number_of_assets = 0, start_time = 0):
         self.owners_nfts = {}
         self.number_of_assets = number_of_assets
+        self.start_time = start_time
         # To remove the pop up notification window
         options = Options()
         options.binary_location = 'C:\Program Files\Mozilla Firefox\\firefox.exe'
@@ -19,14 +20,16 @@ class App:
         self.driver = webdriver.Firefox(executable_path='geckodriver.exe', options=options)
         self.driver.maximize_window()
 
-        for asset in range(1, self.number_of_assets):
+        for asset in range(1, 3):
+            time_by_nft = time.time()
             self.driver.get('https://opensea.io/assets/matic/0x6172974acedb93a0121b2a7b68b8acea0918be8c/' + str(asset))
             self.getOwnersNfts()
-            break
+            print(f"Time by NFT: {time.time() - time_by_nft:0.2f} seconds s")
 
-        self.writeJsonData()
-        sleep(2)
-        #self.driver.quit()
+        self.writeJsonData()    
+        print(f"Total time taken: {time.time() - self.start_time:0.2f} seconds s")
+
+        self.driver.quit()
 
 
     def getOwnersNfts(self):
@@ -79,5 +82,6 @@ class App:
 
 
 if __name__ == '__main__':
+    start_time = time.time()
     number_of_assets = 2514
-    app = App(number_of_assets)
+    app = App(number_of_assets, start_time)
