@@ -133,3 +133,4 @@ chromedriver.exe
 geckodriver.exe
 geckodriver.log
 owners-nfts.json
+owners-nfts.db
