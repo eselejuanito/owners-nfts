@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-import json
 import time
 import sqlite3
-import os.path
+import urllib.request
+import os
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.common.by import By
@@ -10,9 +10,15 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 class App:
-    def __init__(self, number_of_assets = 0, start_time = 0):
+    def __init__(self, number_of_assets = 0, start_time = 0, nft_images_folder = ''):
         self.number_of_assets = number_of_assets
         self.start_time = start_time
+
+        self.nft_images_folder = nft_images_folder
+        # Create a directory or ignore
+        if not os.path.exists(self.nft_images_folder):
+            os.mkdir(self.nft_images_folder)
+
         self.last_id = 1
         # To remove the pop up notification window
         options = Options()
@@ -27,7 +33,8 @@ class App:
         for asset in range(self.last_id, self.number_of_assets + 1):
             time_by_nft = time.time()
             self.driver.get('https://opensea.io/assets/matic/0x6172974acedb93a0121b2a7b68b8acea0918be8c/' + str(asset))
-            self.insertRowNFT(self.getOwnersNfts() )
+            self.saveNFTImage(asset)
+            self.insertRowNFT(self.getOwnersNfts())
             print(f"Time by NFT: {time.time() - time_by_nft:0.2f} seconds s")
   
         print(f"Total time taken: {time.time() - self.start_time:0.2f} seconds s")
@@ -49,7 +56,7 @@ class App:
         else:
             con = sqlite3.connect('owners-nfts.db')
             cursorObj = con.cursor()
-            cursorObj.execute("CREATE TABLE nft(id integer PRIMARY KEY, nickname text, url text, contract_address text, number text, fold text, class_type text, background text, item_1 text, item_2 text, bug numeric)")
+            cursorObj.execute("CREATE TABLE nft(id integer PRIMARY KEY, nickname text, owner_url text, contract_address text, nft_number text, nft_url text, fold text, class_type text, background text, item_1 text, item_2 text, bug numeric)")
 
         con.commit()
         con.close()
@@ -74,6 +81,7 @@ class App:
         nft_information.append(owner_url.get_attribute('href'))
         nft_information.append(nft_contract_address.get_attribute('href'))
         nft_information.append(nft_number.text)
+        nft_information.append(self.driver.current_url)
 
         if position_of_last_element < 4:
             nft_information.append('')
@@ -104,13 +112,18 @@ class App:
     def insertRowNFT(self, data):
         con = sqlite3.connect('owners-nfts.db')
         cursorObj = con.cursor()
-        sql = ''' INSERT INTO nft (nickname, url, contract_address, number, fold, class_type, background, item_1, item_2, bug) VALUES(?,?,?,?,?,?,?,?,?,?) '''
+        sql = ''' INSERT INTO nft (nickname, owner_url, contract_address, nft_number, nft_url, fold, class_type, background, item_1, item_2, bug) VALUES(?,?,?,?,?,?,?,?,?,?,?) '''
         cursorObj.execute(sql, data)
         con.commit()
         con.close()
+
+    def saveNFTImage(self, asset):
+        nft_image = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="main"]/div/div/div/div[1]/div/div[1]/div[1]/article/div/div/div/div/img')))
+        urllib.request.urlretrieve(nft_image.get_attribute('src'), nft_images_folder + '/' + str(asset) + '.jpg')
 
 
 if __name__ == '__main__':
     start_time = time.time()
     number_of_assets = 2514
-    app = App(number_of_assets, start_time)
+    nft_images_folder = 'images'
+    app = App(number_of_assets, start_time, nft_images_folder)
