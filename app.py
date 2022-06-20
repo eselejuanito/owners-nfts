@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import time
+import re
 import sqlite3
 import urllib.request
 import os
@@ -10,9 +11,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 class App:
-    def __init__(self, number_of_assets = 0, start_time = 0, nft_images_folder = ''):
-        self.number_of_assets = number_of_assets
+    def __init__(self, official_collection_url = '', start_time = 0, nft_images_folder = ''):
         self.start_time = start_time
+        # This is the number of sections on left side of NFT: Description, properties, about, and details. Somethings not appears the properties, this is a bug
+        self.number_of_sections = 4
 
         self.nft_images_folder = nft_images_folder
         # Create a directory or ignore
@@ -27,37 +29,75 @@ class App:
         # geckodriver allows you to use emojis, chromedriver does not
         self.driver = webdriver.Firefox(executable_path='geckodriver.exe', options=options)
         self.driver.maximize_window()
+        
+        self.nft_url, self.number_of_assets, self.properties, self.number_of_properties = self.extractingImportantVariables(official_collection_url)
+
         # Only create the first time
-        self.createOrCleanDatabase()
+        if os.path.exists('owners-nfts.db'):
+            self.cleanDatabase(self.properties)
+        else:
+            self.createDatabase(self.properties)
 
         for asset in range(self.last_id, self.number_of_assets + 1):
             time_by_nft = time.time()
-            self.driver.get('https://opensea.io/assets/matic/0x6172974acedb93a0121b2a7b68b8acea0918be8c/' + str(asset))
+            self.driver.get(self.nft_url + str(asset))
             self.saveNFTImage(asset)
-            self.insertRowNFT(self.getOwnersNfts())
+            self.insertRowNFT(self.getOwnersNfts(), self.properties)
             print(f"Time by NFT: {time.time() - time_by_nft:0.2f} seconds s")
   
         print(f"Total time taken: {time.time() - self.start_time:0.2f} seconds s")
         self.driver.quit()
 
+    def extractingImportantVariables(self, official_collection_link):
+        properties = {}
+        properties['create'] = ''
+        properties['insert'] = ''
+        self.driver.get(official_collection_link)
 
-    def createOrCleanDatabase(self):
-        # Clean if exist the table
-        if os.path.exists('owners-nfts.db'):
-            con = sqlite3.connect('owners-nfts.db')
-            cursorObj = con.cursor()
-            cursorObj.execute('SELECT MAX(id) FROM nft')
-            last_one_id = cursorObj.fetchone()[0]
-            if last_one_id < self.number_of_assets:
-                self.last_id = last_one_id + 1
-            else:
-                cursorObj.execute('DELETE FROM nft')
+        # Get number of assets in a collection  
+        number_of_assets_string = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="main"]/div/div/div[5]/div/div[3]/div[3]/div[3]/div[2]/div/p')))
+        number_of_assets = re.findall('[0-9]+', number_of_assets_string.text)
+        if len(number_of_assets) != 1:
+            print ('Not found the number of assets')
+            quit()
 
+        # Get NFT Url
+        nft_url_element = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="main"]/div/div/div[5]/div/div[3]/div[3]/div[3]/div[3]/div[2]/div/div/div[1]/div/article/a')))
+        nft_url_result = re.search('(http(s)?):\/\/(www\.)?opensea\.io\/assets\/[]a-zA-Z0-9]+\/0x[a-fA-F0-9]{40}\/', nft_url_element.get_attribute('href'))
+
+        # Get properties 
+        self.driver.get(nft_url_element.get_attribute('href'))
+        properties_elements = WebDriverWait(self.driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@class="Panel--isContentPadded item--properties"]/a/div/div[@class="Property--type"]')))
+        number_of_properties = len(properties_elements)
+        
+        for property_element in properties_elements:
+            property = property_element.text.lower().replace(' ', '_')
+            properties['create'] = properties['create'] + property + ' text, '
+            properties['insert'] = properties['insert'] + property + ', '
+
+        return nft_url_result.group(0), int(number_of_assets[0]), properties, number_of_properties
+        
+
+
+    def cleanDatabase(self, properties):
+        con = sqlite3.connect('owners-nfts.db')
+        cursorObj = con.cursor()
+        cursorObj.execute('SELECT MAX(id) FROM nft')
+        last_one_id = cursorObj.fetchone()[0]
+        if last_one_id == None:
+            cursorObj.execute('DELETE FROM nft')
+        elif last_one_id < self.number_of_assets:
+            self.last_id = last_one_id + 1
         else:
-            con = sqlite3.connect('owners-nfts.db')
-            cursorObj = con.cursor()
-            cursorObj.execute("CREATE TABLE nft(id integer PRIMARY KEY, nickname text, owner_url text, contract_address text, nft_number text, nft_url text, fold text, class_type text, background text, item_1 text, item_2 text, bug numeric)")
+            cursorObj.execute('DELETE FROM nft')
 
+        con.commit()
+        con.close()
+
+    def createDatabase(self, properties):
+        con = sqlite3.connect('owners-nfts.db')
+        cursorObj = con.cursor()
+        cursorObj.execute("CREATE TABLE nft(id integer PRIMARY KEY, nickname text, owner_url text, contract_address text, nft_number text, nft_url text, " + properties['create'] + "bug numeric)")
         con.commit()
         con.close()
 
@@ -83,36 +123,26 @@ class App:
         nft_information.append(nft_number.text)
         nft_information.append(self.driver.current_url)
 
-        if position_of_last_element < 4:
-            nft_information.append('')
-            nft_information.append('')
-            nft_information.append('')
-            nft_information.append('')
-            nft_information.append('')
+        if position_of_last_element < self.number_of_sections:
+            for index in range(1, self.number_of_properties + 1):
+                nft_information.append('')
             nft_information.append(True)
         else:
             # Properties
-            fold = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[1]/div/div[2]')))
-            class_type = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[2]/div/div[2]')))
-            background = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[3]/div/div[2]')))
-            item_1 = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[4]/div/div[2]')))
-            item_2 = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[5]/div/div[2]')))
+            for index in range(1, self.number_of_properties + 1):
+                property = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[' + str(index) + ']/div/div[2]')))
+                # Fill information of NFT
+                nft_information.append(property.text)
 
-            # Fill information of NFT
-            nft_information.append(fold.text)
-            nft_information.append(class_type.text)
-            nft_information.append(background.text)
-            nft_information.append(item_1.text)
-            nft_information.append(item_2.text)
             nft_information.append(False)
 
         return nft_information
 
 
-    def insertRowNFT(self, data):
+    def insertRowNFT(self, data, properties):
         con = sqlite3.connect('owners-nfts.db')
         cursorObj = con.cursor()
-        sql = ''' INSERT INTO nft (nickname, owner_url, contract_address, nft_number, nft_url, fold, class_type, background, item_1, item_2, bug) VALUES(?,?,?,?,?,?,?,?,?,?,?) '''
+        sql = 'INSERT INTO nft (nickname, owner_url, contract_address, nft_number, nft_url, ' + properties['insert'] + 'bug) VALUES(?,?,?,?,?,?,?,?,?,?,?)'
         cursorObj.execute(sql, data)
         con.commit()
         con.close()
@@ -124,6 +154,7 @@ class App:
 
 if __name__ == '__main__':
     start_time = time.time()
-    number_of_assets = 2514
+    # Only for OpenSea
+    official_collection_url = 'https://opensea.io/collection/nsujpg-v2'
     nft_images_folder = 'images'
-    app = App(number_of_assets, start_time, nft_images_folder)
+    app = App(official_collection_url, start_time, nft_images_folder)
