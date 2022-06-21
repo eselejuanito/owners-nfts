@@ -42,7 +42,7 @@ class App:
             time_by_nft = time.time()
             self.driver.get(self.nft_url + str(asset))
             self.saveNFTImage(asset)
-            self.insertRowNFT(self.getOwnersNfts(), self.properties)
+            self.insertRowNFT(self.getOwnersNfts(), self.properties, self.number_of_properties)
             print(f"Time by NFT: {time.time() - time_by_nft:0.2f} seconds s")
   
         print(f"Total time taken: {time.time() - self.start_time:0.2f} seconds s")
@@ -139,22 +139,31 @@ class App:
         return nft_information
 
 
-    def insertRowNFT(self, data, properties):
+    def insertRowNFT(self, data, properties, number_of_properties):
+        number_of_elements_to_insert = ''
+        for index in range(0, number_of_properties + 6):
+            number_of_elements_to_insert = number_of_elements_to_insert + '?,'
+
         con = sqlite3.connect('owners-nfts.db')
         cursorObj = con.cursor()
-        sql = 'INSERT INTO nft (nickname, owner_url, contract_address, nft_number, nft_url, ' + properties['insert'] + 'bug) VALUES(?,?,?,?,?,?,?,?,?,?,?)'
+        sql = 'INSERT INTO nft (nickname, owner_url, contract_address, nft_number, nft_url, ' + properties['insert'] + 'bug) VALUES(' + number_of_elements_to_insert[:-1] + ')'
         cursorObj.execute(sql, data)
         con.commit()
         con.close()
 
     def saveNFTImage(self, asset):
         nft_image = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="main"]/div/div/div/div[1]/div/div[1]/div[1]/article/div/div/div/div/img')))
-        urllib.request.urlretrieve(nft_image.get_attribute('src'), nft_images_folder + '/' + str(asset) + '.jpg')
+        # ext 
+        ext = os.path.splitext(nft_image.get_attribute('src'))
+        opener = urllib.request.build_opener()
+        opener.addheaders=[('User-Agent','Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/55.0.2883.75 Safari/537.36')]
+        urllib.request.install_opener(opener)
+        urllib.request.urlretrieve(nft_image.get_attribute('src'), nft_images_folder + '/' + str(asset) + ext[1])
 
 
 if __name__ == '__main__':
     start_time = time.time()
     # Only for OpenSea
-    official_collection_url = 'https://opensea.io/collection/nsujpg-v2'
+    official_collection_url = 'https://opensea.io/collection/bookers-oficial'
     nft_images_folder = 'images'
     app = App(official_collection_url, start_time, nft_images_folder)
