@@ -41,7 +41,7 @@ class App:
         for asset in range(self.last_id, self.number_of_assets + 1):
             time_by_nft = time.time()
             self.driver.get(self.nft_url + str(asset))
-            self.saveNFTImage(asset)
+            # self.saveNFTImage(asset)
             self.insertRowNFT(self.getOwnersNfts(), self.properties, self.number_of_properties)
             print(f"Time by NFT: {time.time() - time_by_nft:0.2f} seconds s")
   
@@ -56,7 +56,7 @@ class App:
 
         # Get number of assets in a collection  
         number_of_assets_string = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="main"]/div/div/div[5]/div/div[3]/div[3]/div[3]/div[2]/div/p')))
-        number_of_assets = re.findall('[0-9]+', number_of_assets_string.text)
+        number_of_assets = re.findall('[0-9]+', number_of_assets_string.text.replace('.',''))
         if len(number_of_assets) != 1:
             print ('Not found the number of assets')
             quit()
@@ -68,12 +68,12 @@ class App:
         # Get properties 
         self.driver.get(nft_url_element.get_attribute('href'))
         properties_elements = WebDriverWait(self.driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@class="Panel--isContentPadded item--properties"]/a/div/div[@class="Property--type"]')))
-        number_of_properties = len(properties_elements)
+        number_of_properties = (len(properties_elements)) * 2
         
         for property_element in properties_elements:
             property = property_element.text.lower().replace(' ', '_')
-            properties['create'] = properties['create'] + property + ' text, '
-            properties['insert'] = properties['insert'] + property + ', '
+            properties['create'] = properties['create'] + property + ' text, ' + property + '_rarity real, '
+            properties['insert'] = properties['insert'] + property + ', ' + property + '_rarity, '
 
         return nft_url_result.group(0), int(number_of_assets[0]), properties, number_of_properties
         
@@ -110,10 +110,12 @@ class App:
         owner_url = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="main"]/div/div/div/div[1]/div/div[1]/div[2]/section[2]/div[1]/div/a')))
 
         # Because we have nfts with no properties (bug), we need to make another validation
-        items_summary = WebDriverWait(self.driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div')))
+        items_summary = WebDriverWait(self.driver, 5).until(EC.presence_of_all_elements_located((By.XPATH, '//*[@class="item--summary"]/section/div/div')))
         position_of_last_element = len(items_summary)
 
-        nft_contract_address = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[' + str(position_of_last_element) + ']/div/div/div/div/div/div[1]/span/a')))
+        # nft_contract_address = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[' + str(position_of_last_element) + ']/div/div/div/div/div/div[1]/span/a')))
+
+        nft_contract_address = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="Body assets-item-asset-details"]/div/div/div/div[1]/span/a')))
 
         nft_number = WebDriverWait(self.driver, 5).until(EC.presence_of_element_located((By.XPATH, '//*[@id="main"]/div/div/div/div[1]/div/div[1]/div[2]/section[1]/h1')))
 
@@ -129,11 +131,14 @@ class App:
             nft_information.append(True)
         else:
             # Properties
-            for index in range(1, self.number_of_properties + 1):
-                property = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '/html/body/div[1]/div/main/div/div/div/div[1]/div/div[1]/div[1]/section/div/div[2]/div/div/div/div/a[' + str(index) + ']/div/div[2]')))
+            n_properties = int(self.number_of_properties / 2)
+            for index in range(1, n_properties + 1):
+                property = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="Body assets-item-properties"]/div/div/a[' + str(index) + ']/div/div[2]')))
+                percentage = WebDriverWait(self.driver, 5).until(EC.element_to_be_clickable((By.XPATH, '//*[@id="Body assets-item-properties"]/div/div/a[' + str(index) + ']/div/div[3]')))
                 # Fill information of NFT
                 nft_information.append(property.text)
-
+                nft_information.append(float(re.findall(r'\d*\.\d+|\d+', percentage.text)[0]))
+                
             nft_information.append(False)
 
         return nft_information
